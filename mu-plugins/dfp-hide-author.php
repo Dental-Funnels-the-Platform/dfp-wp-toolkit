@@ -2,7 +2,7 @@
 /**
  * Plugin Name: DIM Author Privacy
  * Description: Stops WordPress from exposing usernames and staff emails on the front end. Blog posts keep a clean author byline; pages and every other post type show no author. Works with Rank Math, Yoast SEO, or no SEO plugin.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Dental Implant Machine
  * License:     GPL-2.0-or-later
  *
@@ -14,7 +14,7 @@
  *  1. ?author=N and ?author_name= enumeration      -> 301 to home
  *  2. /author/slug/ archives + author links        -> home, unless the user has blog posts, a safe name,
  *                                                     and a slug that isn't their login
- *  3. REST /wp/v2/users (list, single, search)      -> only blog authors, and never an email/username as the name
+ *  3. REST /wp/v2/users (list, single, search)      -> closed (404) for logged-out visitors
  *  4. oEmbed author_name / author_url               -> removed on non-blog content
  *  5. Rank Math + Yoast schema, "Written by" tags   -> removed on non-blog content
  *  6. Theme bylines on pages                        -> blanked
@@ -28,7 +28,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'DIM_AUTHOR_PRIVACY_VERSION', '1.0.0' );
+define( 'DIM_AUTHOR_PRIVACY_VERSION', '1.2.0' );
 
 /* -------------------------------------------------------------------------
  * Helpers
@@ -179,6 +179,22 @@ add_filter( 'author_link', function ( $link, $author_id ) {
  * 3. REST API users
  * ---------------------------------------------------------------------- */
 
+// Close the REST user endpoints completely for logged-out visitors (v1.2.0).
+// Logged-in users (block editor, Elementor) keep full access.
+add_filter( 'rest_endpoints', function ( $endpoints ) {
+	if ( is_user_logged_in() ) {
+		return $endpoints;
+	}
+	foreach ( array_keys( $endpoints ) as $route ) {
+		if ( 0 === strpos( $route, '/wp/v2/users' ) ) {
+			unset( $endpoints[ $route ] );
+		}
+	}
+	return $endpoints;
+}, 99 );
+
+// Defense in depth for logged-in users without list_users (e.g. subscribers):
+// they only see blog authors, never with an email/login as the name.
 // List and search: visitors only see users who wrote blog posts.
 add_filter( 'rest_user_query', function ( $args ) {
 	if ( dim_ha_is_public_request() ) {
